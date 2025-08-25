@@ -1,5 +1,6 @@
 from pymongo import MongoClient
-from sentence_transformers import SentenceTransformer
+# Note: local sentence-transformers are not used in this deployment. Embeddings
+# should be provided by external services if required.
 import re
 import random
 import hashlib
@@ -48,8 +49,9 @@ except Exception as e:
     db = None
     collection = None
 
-# Initialize embedder
-embedder = SentenceTransformer("all-MiniLM-L6-v2")
+# No local embedder in this deployment. Keep a placeholder variable for
+# backward compatibility; functions should not rely on it being populated.
+embedder = None
 
 # --- Session-based randomization ---
 class InterviewSession:
