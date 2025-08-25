@@ -1,0 +1,6 @@
+--find-links https://download.pytorch.org/whl/cpu/torch_stable.html
+torch==2.8.0+cpu
+sentence-transformers
+
+# Development / optional heavy deps
+# Use these locally if you want to run embeddings on your machine.

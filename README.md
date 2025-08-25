@@ -19,4 +19,15 @@ Render Python runtime requirement
 - Set the service runtime to **Python 3.11** in Render (Environment -> Runtime). PyTorch wheels in the official find-links are most compatible with Python 3.11 on Render.
 - We include a `--find-links` entry in `requirements.txt` to pull CPU-only PyTorch wheels from PyTorch's stable CPU index.
 
+Requirements files
+------------------
+- `requirements.txt` — slim production requirements for deployment (suitable for Render). Does NOT include heavy local ML stacks.
+- `requirements-dev.txt` — development requirements that include `torch` and `sentence-transformers` for local embedding experiments. Install locally with:
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+On Render use the normal `requirements.txt` to keep builds small.
+
 

@@ -209,158 +209,63 @@ def generate_varied_queries(skills: List[str], session: InterviewSession) -> Lis
 # --- Enhanced Context Retrieval with Diversity ---
 def get_diverse_context(skills: List[str], collection, session: InterviewSession) -> Dict[str, List[Dict]]:
     """Retrieve diverse contexts with session-based variation"""
-    
     category_weights = session.get_rotation_weights()
-    queries = generate_varied_queries(skills, session)
-    
-    # print(f"🔍 Using {len(queries)} varied search queries")
-    
-    all_contexts = {}
-    
-    # Try each query and aggregate results
-    for i, query in enumerate(queries):
-        # print(f"🔍 Query {i+1}: {query[:60]}...")
-        
-        try:
-            query_embedding = embedder.encode(query).tolist()
-            
-            # Vector search with different numCandidates for variety
-            num_candidates = random.choice([200, 300, 400, 500])
-            
-            # Get results for each category
-            for category, target_count in category_weights.items():
-                
-                if category == "dsa":
-                    match_filter = {"category": "DSA"}
-                elif category == "easy_medium":
-                    match_filter = {
-                        "difficulty": {"$in": ["Easy", "Medium"]},
-                        "category": {"$ne": "DSA"}
-                    }
-                elif category == "hard":
-                    match_filter = {
-                        "difficulty": "Hard", 
-                        "category": {"$ne": "DSA"}
-                    }
-                elif category == "behavioral":
-                    match_filter = {
-                        "$or": [
-                            {"type": "conceptual"},
-                            {"category": {"$in": ["Behavioral", "System Design", "General"]}}
-                        ]
-                    }
-                
-                try:
-                    results = list(collection.aggregate([
-                        {"$vectorSearch": {
-                            "index": "vector_index",
-                            "queryVector": query_embedding,
-                            "path": "embedding", 
-                            "numCandidates": num_candidates,
-                            "limit": target_count * 3  # Get more for diversity
-                        }},
-                        {"$match": match_filter},
-                        {"$project": {
-                            "category": 1, "topic": 1, "difficulty": 1, "type": 1,
-                            "question": 1, "answer": 1, "complexity": 1,
-                            "score": {"$meta": "vectorSearchScore"}, "_id": 1
-                        }},
-                        {"$sort": {"score": -1}}
-                    ]))
-                    
-                    if category not in all_contexts:
-                        all_contexts[category] = []
-                    
-                    # Filter out duplicates by question text or ID
-                    for result in results:
-                        question_hash = hashlib.md5(
-                            (result.get('question', '') + str(result.get('_id', '')))
-                            .encode()
-                        ).hexdigest()
-                        
-                        if question_hash not in session.used_questions:
-                            all_contexts[category].append(result)
-                            session.used_questions.add(question_hash)
-                    
-                except Exception as ve:
-                    print(f"❌ Vector search failed for {category}: {ve}")
-                    continue
-                    
-        except Exception as e:
-            print(f"❌ Query {i+1} failed: {e}")
-            continue
-    
-    # Diversify and sample final results
     final_contexts = {}
-    for category, items in all_contexts.items():
-        target_count = category_weights[category]
-        
-        if not items:
-            # print(f"⚠️ No items for {category}, using fallback")
-            # Fallback sampling
-            try:
-                if category == "dsa":
-                    fallback = list(collection.aggregate([
-                        {"$match": {"category": "DSA"}},
-                        {"$sample": {"size": target_count}}
-                    ]))
-                elif category == "easy_medium":
-                    fallback = list(collection.aggregate([
-                        {"$match": {"difficulty": {"$in": ["Easy", "Medium"]}}},
-                        {"$sample": {"size": target_count}}
-                    ]))
-                elif category == "hard":
-                    fallback = list(collection.aggregate([
-                        {"$match": {"difficulty": "Hard"}},
-                        {"$sample": {"size": target_count}}
-                    ]))
-                else:
-                    fallback = list(collection.aggregate([
-                        {"$match": {"$or": [{"type": "conceptual"}, {"category": "Behavioral"}]}},
-                        {"$sample": {"size": target_count}}
-                    ]))
-                
-                items = fallback
-            except:
-                items = []
-        
-        # Diversify selection
-        if len(items) > target_count:
-            # Group by topic/difficulty for diversity
-            topic_groups = {}
-            for item in items:
-                topic = item.get('topic', 'general')
-                difficulty = item.get('difficulty', 'medium')
-                key = f"{topic}_{difficulty}"
-                
-                if key not in topic_groups:
-                    topic_groups[key] = []
-                topic_groups[key].append(item)
-            
-            # Sample from different groups for diversity
+
+    # If collection is None (DB not connected), return empty contexts
+    if collection is None:
+        for category in category_weights:
+            final_contexts[category] = []
+        return final_contexts
+
+    # Map our categories to simple Mongo filters
+    for category, target_count in category_weights.items():
+        if category == "dsa":
+            match_filter = {"category": "DSA"}
+        elif category == "easy_medium":
+            match_filter = {"difficulty": {"$in": ["Easy", "Medium"]}, "category": {"$ne": "DSA"}}
+        elif category == "hard":
+            match_filter = {"difficulty": "Hard", "category": {"$ne": "DSA"}}
+        elif category == "behavioral":
+            match_filter = {"$or": [{"type": "conceptual"}, {"category": {"$in": ["Behavioral", "System Design", "General"]}}]}
+        else:
+            match_filter = {}
+
+        try:
+            # Use aggregation with $match + $sample for random selection from DB
+            sample_size = max(target_count * 3, target_count)
+            pipeline = [{"$match": match_filter}, {"$sample": {"size": sample_size}}]
+            items = list(collection.aggregate(pipeline))
+
+            # Filter out already-used questions for this session
             selected = []
-            group_keys = list(topic_groups.keys())
-            random.shuffle(group_keys)
-            
-            for key in group_keys:
+            for item in items:
+                qid = str(item.get("id") or item.get("_id"))
+                if qid in session.used_questions:
+                    continue
+                session.used_questions.add(qid)
+                selected.append(item)
                 if len(selected) >= target_count:
                     break
-                group_items = topic_groups[key]
-                selected.extend(random.sample(group_items, min(1, len(group_items))))
-            
-            # Fill remaining if needed
+
+            # If we couldn't fill target_count, do a fallback small sample without filters
             if len(selected) < target_count:
-                remaining = [item for item in items if item not in selected]
-                if remaining:
-                    additional = random.sample(remaining, min(target_count - len(selected), len(remaining)))
-                    selected.extend(additional)
-            
-            final_contexts[category] = selected[:target_count]
-        else:
-            final_contexts[category] = items
-        
-        # print(f"📋 {category}: {len(final_contexts[category])} items selected")
-    
+                try:
+                    extra_pipeline = [{"$sample": {"size": target_count - len(selected)}}]
+                    extras = [e for e in collection.aggregate(extra_pipeline) if str(e.get("id") or e.get("_id")) not in session.used_questions]
+                    for e in extras:
+                        session.used_questions.add(str(e.get("id") or e.get("_id")))
+                        selected.append(e)
+                        if len(selected) >= target_count:
+                            break
+                except Exception:
+                    pass
+
+            final_contexts[category] = selected
+        except Exception as e:
+            print(f"[get_diverse_context] DB query failed for {category}: {e}")
+            final_contexts[category] = []
+
     return final_contexts
 
 # --- Enhanced Resume Analysis (same as before) ---
@@ -833,10 +738,10 @@ if __name__ == "__main__":
     
     try:
         result = interview_rag_pipeline(resume_pdf_path, collection)
-        # print(f"\n✅ Pipeline completed successfully!")
-        # print(f"📊 Session: {result.get('session_id', 'Unknown')}")
-        # print(f"📊 Summary: {len(result['skills'])} skills, {result['contexts_retrieved']} contexts retrieved")
-        # print(f"🎯 Sections generated: {len(result['sections'])}")
+        print(f"\n✅ Pipeline completed successfully!")
+        print(f"📊 Session: {result.get('session_id', 'Unknown')}")
+        print(f"📊 Summary: {len(result['skills'])} skills, {result['contexts_retrieved']} contexts retrieved")
+        print(f"🎯 Sections generated: {len(result['sections'])}")
     except Exception as e:
         print(f"❌ Pipeline failed: {e}")
         pass
