@@ -20,10 +20,33 @@ from typing import Literal, Optional
 load_dotenv()
 
 # --- Connect to MongoDB ---
-MONGO_URI = "mongodb+srv://vishnuvardhan0902:M%23Vishnu%400902@cluster0.btgym.mongodb.net/Endeavor?retryWrites=true&w=majority"
-client = MongoClient(MONGO_URI)
-db = client["Endeavor"]
-collection = db["ragCollection"]
+# Prefer a full connection string in MONGO_URI. If not provided, build from parts.
+MONGO_URI = os.getenv("MONGO_URI")
+if not MONGO_URI:
+    MONGO_USER = os.getenv("MONGO_USER")
+    MONGO_PASSWORD = os.getenv("MONGO_PASSWORD")
+    MONGO_HOST = os.getenv("MONGO_HOST", "localhost:27017")
+    MONGO_DB = os.getenv("MONGO_DB", "Endeavor")
+    # If user/password provided, assume a SRV-style URI (Atlas)
+    if MONGO_USER and MONGO_PASSWORD:
+        # Note: host for Atlas should be like cluster0.btgym.mongodb.net
+        MONGO_URI = f"mongodb+srv://{MONGO_USER}:{MONGO_PASSWORD}@{MONGO_HOST}/{MONGO_DB}?retryWrites=true&w=majority"
+    else:
+        # Fallback to a plain mongodb URI
+        MONGO_URI = os.getenv("MONGO_URI", f"mongodb://{MONGO_HOST}/{MONGO_DB}")
+
+try:
+    client = MongoClient(MONGO_URI)
+    db_name = os.getenv("MONGO_DB", "Endeavor")
+    db = client[db_name]
+    collection_name = os.getenv("MONGO_COLLECTION", "ragCollection")
+    collection = db[collection_name]
+except Exception as e:
+    # Log helpful message but don't crash import; endpoints will raise clearer errors if DB is required
+    print(f"[endeavor_rag_service] Warning: could not connect to MongoDB with URI={MONGO_URI}: {e}")
+    client = None
+    db = None
+    collection = None
 
 # Initialize embedder
 embedder = SentenceTransformer("all-MiniLM-L6-v2")
