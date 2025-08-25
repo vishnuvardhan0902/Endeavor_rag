@@ -1,3 +1,4 @@
+torch==2.2.2+cpu -f https://download.pytorch.org/whl/cpu/torch_stable.html
 gunicorn
 sentence-transformers
 pymongo
@@ -11,5 +12,4 @@ langchain_community
 python-dotenv
 jq
 pypdf
-rapidfuzz
 pydantic
