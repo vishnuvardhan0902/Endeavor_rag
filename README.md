@@ -14,4 +14,9 @@ By default some wheels may pull CUDA-enabled PyTorch. To force a CPU-only instal
 
 If you already deployed and Render installed CUDA-enabled torch, redeploy after updating the repo (commit & push the changed `requirements.txt`). In Render: open your service -> Manual Deploy -> Deploy Latest Revision.
 
+Render Python runtime requirement
+---------------------------------
+- Set the service runtime to **Python 3.11** in Render (Environment -> Runtime). PyTorch wheels in the official find-links are most compatible with Python 3.11 on Render.
+- We include a `--find-links` entry in `requirements.txt` to pull CPU-only PyTorch wheels from PyTorch's stable CPU index.
+
 
