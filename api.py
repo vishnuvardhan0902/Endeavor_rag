@@ -16,10 +16,13 @@ from dotenv import load_dotenv
 
 app = FastAPI()
 
-# Add CORS so local frontends (e.g. http://localhost:3000) can call the API
+# Add CORS so frontends on Render and local hosts can call the API.
+# To allow all origins on Render while still permitting credentials,
+# use allow_origin_regex. This is intentionally wide-open; if you
+# want stricter security, replace the regex with a specific list.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "https://endeavor-ai.onrender.com","https://endeavor-backend.onrender.com"],
+    allow_origin_regex=".*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
