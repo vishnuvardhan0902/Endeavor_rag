@@ -1,0 +1,14 @@
+sentence-transformers
+pymongo
+fastapi
+uvicorn[standard]
+python-multipart
+langchain
+langchain_core
+langchain_google_genai
+langchain_community
+dotenv
+jq
+pypdf
+rapidfuzz
+pydantic
